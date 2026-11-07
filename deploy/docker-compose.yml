@@ -1,0 +1,95 @@
+# Relay local stack.  Build jars first:  mvn -B -DskipTests package
+# Then:  docker compose -f deploy/docker-compose.yml up -d --build
+# Scale workers:  docker compose -f deploy/docker-compose.yml up -d --scale worker=4
+name: relay
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: relay
+      POSTGRES_USER: relay
+      POSTGRES_PASSWORD: relay
+    command: >
+      postgres
+      -c max_connections=200
+      -c shared_buffers=256MB
+      -c effective_cache_size=768MB
+      -c wal_compression=on
+      -c autovacuum_naptime=10s
+      -c autovacuum_vacuum_scale_factor=0.05
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U relay -d relay"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  relay-server:
+    image: relay/relay-server:dev
+    build:
+      context: ..
+      dockerfile: relay-server/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/relay
+      DB_USER: relay
+      DB_PASSWORD: relay
+      JAVA_TOOL_OPTIONS: "-Xmx384m"
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health/readiness | grep -q UP"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  worker:
+    image: relay/relay-worker:dev
+    build:
+      context: ..
+      dockerfile: relay-worker/Dockerfile
+    depends_on:
+      relay-server:
+        condition: service_healthy
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/relay
+      DB_USER: relay
+      DB_PASSWORD: relay
+      RELAY_QUEUE: default
+      RELAY_CONCURRENCY: "10"
+      RELAY_LEASE_SECS: "30"
+      RELAY_SHUTDOWN_GRACE_SECS: "20"
+      JAVA_TOOL_OPTIONS: "-Xmx192m"
+    stop_grace_period: 30s
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    depends_on:
+      - relay-server
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/relay.json
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+
+volumes:
+  pgdata:

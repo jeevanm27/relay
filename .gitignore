@@ -1,0 +1,9 @@
+target/
+node_modules/
+*.log
+.idea/
+.vscode/
+*.iml
+# raw chaos run outputs; benchmark results (bench/results/benchmarks-*) are kept on purpose
+bench/results/chaos-*.json
+bench/results/k6-*.json

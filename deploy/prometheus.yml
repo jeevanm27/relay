@@ -1,0 +1,17 @@
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  - job_name: relay-server
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["relay-server:8080"]
+
+  # Docker's DNS returns one A record per replica of the "worker" service, so scaled workers are all scraped.
+  - job_name: relay-worker
+    metrics_path: /metrics
+    dns_sd_configs:
+      - names: ["worker"]
+        type: A
+        port: 9404
