@@ -44,7 +44,7 @@ The API is available on port 8080, Prometheus on 9090, and Grafana on 3000.
 
 ## Limitations and known flaws
 
-This is a portfolio project, not a production-ready queue. The main gaps are:
+This is a project for learning and demonstration, not a production-ready queue. The main gaps are:
 
 1. The REST API has no authentication, authorization, rate limiting, or tenant isolation at the network boundary.
 2. It depends on one PostgreSQL instance; there is no sharding, replication strategy, multi-region failover, or automated backup setup.
